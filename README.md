@@ -39,7 +39,7 @@ A persistent, token-efficient memory layer for an LLM coding agent (Claude Code)
 
 *(Measured 2026-06-10 from the project's own token instrumentation; figures reconcile with its per-session ledger, and the Haiku total is exact as reported by the runtime.)*
 
-**Subscription cost (Claude Pro / Max).** The 5-hour usage window is sized relative to Pro - Max 5x ($100) is roughly 5x Pro, Max 20x ($200) roughly 20x - and Opus draws the allowance down faster than Sonnet or Haiku. Because `/compress-last` runs most of its work on Haiku and serves ~81% of the orchestrator's input from cache, one save is a small fraction of a Max window: negligible in normal daily work, and not meaningfully different between the $100 and $200 tiers. It is more noticeable on the smaller Pro window, but stays a once-per-session operation. *(Plan limits as researched 2026-06-10; Anthropic adjusts these periodically, so treat the relationship, not any exact figure, as the takeaway.)*
+**5-hour usage window.** Claude subscriptions (Pro and Max) meter usage in a rolling 5-hour window. Because `/compress-last` offloads most of its work to Haiku and serves ~81% of the orchestrator's input from cache, a single save consumes only a small fraction of that window - negligible in normal daily work. *(Subscription limits change over time; figures checked 2026-06-10.)*
 
 ## How the pieces fit
 
