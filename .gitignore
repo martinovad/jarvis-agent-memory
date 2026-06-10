@@ -1,0 +1,11 @@
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+
+# Local Claude Code settings (per-machine permission grants)
+.claude/settings.local.json
+
+# Local memory/hook state (manages its own state)
+.remember/

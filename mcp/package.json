@@ -1,0 +1,14 @@
+{
+  "name": "jarvis-mcp",
+  "version": "1.1.0",
+  "type": "module",
+  "description": "Custom MCP server for JARVIS — direct vault file access",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "zod": "^3.23.8"
+  }
+}

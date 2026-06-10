@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "WebSearch",
+      "mcp__jarvis__write_note",
+      "mcp__jarvis__list_folder",
+      "mcp__jarvis__read_note",
+      "Read(//c/Users/<you>/.claude/**)",
+      "mcp__jarvis__search_filename",
+      "mcp__jarvis__append_note",
+      "mcp__jarvis__search_content",
+      "Read(//c/Users/<you>/**)",
+      "mcp__jarvis__read_frontmatter",
+      "Bash(gh repo *)",
+      "Bash(gh api *)",
+      "WebFetch(domain:github.com)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\<you>\\Documents\\JARVIS-Vault\\System\\JARVIS",
+      "C:\\Users\\<you>\\Documents\\JARVIS-Vault\\Knowledge",
+      "C:\\Users\\<you>\\.claude\\hooks",
+      "C:\\Users\\<you>\\.claude\\commands"
+    ]
+  },
+  "env": {
+    "JARVIS_VAULT_ROOT": "System/JARVIS",
+    "JARVIS_PROJECT_PATH": "C:/Users/<you>/Active Projects/Jarvis"
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/token-ledger-stop.cjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
