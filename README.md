@@ -8,7 +8,36 @@ A persistent memory layer that gives Claude Code zero-manual cross-session conte
 
 ## Overview
 
-JARVIS is a persistent, token-efficient memory layer that gives an LLM coding agent (Claude Code) continuous cross-session context at a target of ≤2% token overhead. It is architected as a four-tier memory system grounded in the cognitive-architecture literature (CoALA): a hot *working-memory* buffer, an *episodic* store of full session logs, a *semantic* store of distilled decisions and architecture notes, and *procedural* skills — all persisted as plain Markdown in an Obsidian vault and exposed to the agent through a custom Model Context Protocol (MCP) server. Its core engineering principle is a strict split between deterministic and probabilistic work: mechanical tasks (verbatim transcript extraction, file-change tracking, keyword-frequency scoring, link resolution) run as zero-token Node.js scripts, while a thin orchestrator delegates only judgment-heavy work to cheaper Haiku sub-agents in isolated context windows — keeping cost decoupled from session size. On top of this sit skills that mirror human memory processes: session compression, a *“dreaming”* consolidation pass that promotes recurring knowledge into permanent memory behind a human approval gate (informed by Generative Agents' reflection and A-MEM's linked-note evolution), and a retrieval layer that traverses a typed knowledge graph of the vault. Key automations ship with A/B verification harnesses, reflecting a deliberate *measure-before-you-trust* discipline rather than shipping on faith.
+LLM coding agents are stateless: every new session starts from zero. The two usual ways to carry context forward both scale the wrong way:
+
+- **Keep one ever-growing conversation.** The full history is re-sent on every turn, so token usage grows roughly quadratically with turn count and quality drops as the window fills (the "lost-in-the-middle" and long-context-degradation effects). A real 498-turn session measured here was re-sending ~268K tokens *every turn* just to carry history, climbing toward the 1M-token ceiling.
+- **Start fresh and re-explain.** Cheaper per turn, but lossy and manual: you re-type context and decide from memory what mattered.
+
+JARVIS removes the tradeoff by keeping knowledge in a vault instead of the context window. Each session starts lean; what you learned persists as plain Markdown and is pulled back on demand.
+
+## What it is
+
+A persistent, token-efficient memory layer for an LLM coding agent (Claude Code), targeting ≤2% token overhead per session:
+
+- **Four-tier memory (CoALA-grounded):** a hot *working-memory* buffer, an *episodic* store of full session logs, a *semantic* store of distilled decisions and architecture notes, and *procedural* skills - all plain Markdown in an Obsidian vault, exposed through a custom MCP server.
+- **Deterministic / probabilistic split:** mechanical work (verbatim transcript extraction, file-change tracking, keyword-frequency scoring, link resolution) runs as zero-token Node.js scripts; a thin orchestrator delegates only judgment to cheap Haiku sub-agents in isolated context windows, so cost stays decoupled from session size.
+- **Human-memory-like skills:** session compression, a *"dreaming"* consolidation pass that promotes recurring knowledge into permanent memory behind a human approval gate (informed by Generative Agents' reflection and A-MEM's linked-note evolution), and a retrieval layer that traverses a typed knowledge graph of the vault.
+- **Measure-before-you-trust:** key automations ship with A/B verification harnesses rather than on faith.
+
+## Token economics
+
+| Dimension | Normal AI (no memory layer) | JARVIS |
+|---|---|---|
+| Cross-session memory | None: cold start every session | Persistent vault, loaded automatically |
+| Standing overhead / session | 0 | ~2K tokens (~0.2% of a 1M window) |
+| Restore prior context | Manual re-paste, or carry the whole transcript | `/resume`: ~1-3K tokens, automatic |
+| Keep a long history alive | Quadratic re-send, up to the 1M wall | Start fresh; knowledge lives in the vault |
+| Save a session for later | Not really possible | `/compress-last`: ~83K Haiku tokens, decoupled from session size |
+| Quality at scale | Degrades as history grows | Lean context + front-loaded summaries |
+
+**Measured example.** Saving a 498-turn / 130.5M-cumulative-token work session cost **~83K Haiku tokens** for the part that actually reads and rewrites it, and that figure stays roughly flat no matter how large the saved session is, because the heavy reading happens in isolated Haiku sub-agents rather than the coordinating model's window.
+
+*(Figures are from the project's own token instrumentation and reconcile with its per-session ledger; the Haiku total is exact as reported by the runtime.)*
 
 ## How the pieces fit
 
