@@ -32,7 +32,7 @@ A persistent, token-efficient memory layer for an LLM coding agent (Claude Code)
 | Standing overhead / session | 0 | ~2K tokens (~0.2% of a 1M window) |
 | Restore prior context | Manual re-paste, or carry the whole transcript | `/resume`: ~1-3K tokens, automatic |
 | Keep a long history alive | Quadratic re-send, up to the 1M wall | Start fresh; knowledge lives in the vault |
-| Save a session for later | Not really possible | `/compress-last`: ~83K Haiku tokens, decoupled from session size |
+| Save a session for later | Not really possible | `/compress-last`: lightweight Haiku token usage, decoupled from session size |
 | Quality at scale | Degrades as history grows | Lean context + front-loaded summaries |
 
 **Measured example.** Saving a 498-turn / 130.5M-cumulative-token work session cost **~83K Haiku tokens** for the part that actually reads and rewrites it, and that figure stays roughly flat no matter how large the saved session is, because the heavy reading happens in isolated Haiku sub-agents rather than the coordinating model's window.
