@@ -35,7 +35,7 @@ A persistent, token-efficient memory layer for an LLM coding agent (Claude Code)
 | Save a session for later | Not really possible | `/compress-last`: lightweight Haiku token usage, decoupled from session size |
 | Quality at scale | Degrades as history grows | Lean context + front-loaded summaries |
 
-**Measured example.** Saving a 498-turn / 130.5M-cumulative-token work session cost **~83K Haiku tokens** for the part that actually reads and rewrites it, and that figure stays roughly flat no matter how large the saved session is, because the heavy reading happens in isolated Haiku sub-agents rather than the coordinating model's window.
+**Measured example.** Saving a 498-turn / 130.5M-cumulative-token work session cost **~83K Haiku tokens** (~3% to 5% of your total 5-hour window limit using standard Pro version) for the part that actually reads and rewrites it, and that figure stays roughly flat no matter how large the saved session is, because the heavy reading happens in isolated Haiku sub-agents rather than the coordinating model's window.
 
 *(Measured 2026-06-10 from the project's own token instrumentation; figures reconcile with its per-session ledger, and the Haiku total is exact as reported by the runtime.)*
 
