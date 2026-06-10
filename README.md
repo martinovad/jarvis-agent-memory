@@ -170,7 +170,7 @@ Copy-Item ".\skills\*.md"  "$cc\commands\" -Force
 Copy-Item ".\agents\*.md"  "$cc\agents\"   -Force
 ```
 
-This installs all skills (`/resume`, `/compress`, `/compress-last`, `/preserve`, `/dream`, `/recall`, `/status`, `/test-resume`, `/test-compress`) and the `resume` + `dream` Haiku agents.
+This installs all skills (`/resume`, `/compress`, `/compress-last`, `/preserve`, `/dream`, `/recall`, `/status`, `/dashboard`, `/test-resume`, `/test-compress`) and the `resume` + `dream` Haiku agents.
 
 ## 5. Reload and verify
 
@@ -208,6 +208,7 @@ A healthy result reports the MCP connection up plus Working-Memory and Session-L
 | `/dream` | Consolidate recurring knowledge into permanent memory: a deterministic anchor (`dream-scan.js`) finds recurring topics, the `dream` Haiku agent proposes promotions / profile updates / stale demotions, you approve each. |
 | `/recall <topic>` | Full-text + filename vault search, then 1-hop link traversal (`recall-links.js`) surfacing connected notes grouped by memory role. |
 | `/status` | MCP health + Working-Memory / Session-Logs counts + token-cap check. |
+| `/dashboard` | Regenerate the token-usage dashboard from the ledger (`token-report.js --html`) and open it in the browser. |
 | `/test-resume` | A/B harness verifying the `resume` agent against inline execution. |
 | `/test-compress` | Verifies the transcript extractor's fidelity, speed, and cost. |
 
