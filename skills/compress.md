@@ -12,7 +12,7 @@ $enc = (Get-Location).Path -replace '[:\\/ ]','-'
 Capture the printed path as TRANSCRIPT — the current session's JSONL (the most recently written). If nothing is found, note it and skip the verbatim Raw Session Log in Step 3 (structured sections only).
 
 **Step 1 — Silent analysis**
-Review the full conversation. Prepare:
+Review the full conversation. First run `node "C:\Users\<you>\Active Projects\Jarvis\mcp\scripts\user-asks.js" "{TRANSCRIPT}"` (PowerShell tool; skip if no TRANSCRIPT) - a deterministic table-of-contents of every user ask; treat it as a CHECKLIST so no thread is dropped from a long session (every ask must be reflected in the sections below). Prepare:
 - SLUG: 2-4 word domain slug (e.g. compress-redesign, hook-system)
 - KEYWORDS: 4-8 terms (project names, technical terms, tools, action types)
 - QUICK RESUME: 2-3 sentences that fully orient the next session

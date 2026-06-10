@@ -50,6 +50,12 @@ node "C:\Users\<you>\Active Projects\Jarvis\mcp\scripts\files-touched.js" "{PREV
 ```
 Capture the output as FILES_TOUCHED.
 
+Also capture the deterministic list of user asks - a numbered table-of-contents of every user turn. The cleaned conversation is long and the analyzer can lossily drop later threads; this anchor guarantees every distinct ask is represented:
+```powershell
+node "C:\Users\<you>\Active Projects\Jarvis\mcp\scripts\user-asks.js" "{PREV_TRANSCRIPT}"
+```
+Capture the output as USER_ASKS.
+
 **Step 2 — Phase 1: spawn the analyzer** (parent). Agent tool: `subagent_type: general-purpose`, `model: haiku`. Prompt:
 ```
 Files changed in this session (deterministic ground truth, extracted from tool calls — the cleaned conversation below has tool calls STRIPPED, so this is the authoritative record of what was built/edited):
@@ -57,7 +63,10 @@ Files changed in this session (deterministic ground truth, extracted from tool c
 
 Reproduce that list verbatim in FILES MODIFIED, and let it anchor your whole summary: if files were changed, this was a BUILD session — do NOT characterize it as research/discussion only.
 
-Read the cleaned conversation at {TEMP_CONV} ONCE, fully (use a single Read; do not re-read in chunks). Produce a compress PLAN as plain structured text and nothing else:
+Every distinct user request in this session (deterministic table-of-contents, in order). The cleaned conversation is long and easy to under-read, so treat this as a CHECKLIST your summary must cover - no ask may be silently dropped, even minor or non-build ones. A session can span unrelated threads (a build, then research, then a personal or admin task) - capture all of them:
+{USER_ASKS}
+
+Read the cleaned conversation at {TEMP_CONV} ONCE, fully (use a single Read; do not re-read in chunks). Before finalizing, verify every numbered ask above is reflected somewhere in QUICK RESUME / DECISIONS / KEY LEARNINGS / PENDING TASKS. Produce a compress PLAN as plain structured text and nothing else:
 - SLUG (2-4 word kebab-case)
 - KEYWORDS (4-8, comma-separated)
 - QUICK RESUME (2-3 sentences orienting the next session)

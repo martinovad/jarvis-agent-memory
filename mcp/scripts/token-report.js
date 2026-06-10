@@ -10,7 +10,7 @@
 //
 // Two usage sources in a transcript:
 //  - assistant `message.usage`   -> MAIN thread (full input/cache/output split)
-//  - `Agent` tool_result <usage> -> SUBAGENT totals (total_tokens only). Subagent
+//  - `Agent` tool_result <usage> -> SUBAGENT totals (subagent_tokens; older runs: total_tokens). Subagent
 //    turns aren't recorded as message.usage in the parent file, so their cost is
 //    invisible unless we read the Agent result — the local equivalent of OTEL's
 //    per-subagent agent_id spans, without standing up a collector.
@@ -80,7 +80,7 @@ function analyze(file) {
           const m = t.match(/<usage>([\s\S]*?)<\/usage>/);
           if (m) {
             const num = re => Number((m[1].match(re) || [])[1] || 0);
-            subUsage.set(b.tool_use_id, { total: num(/total_tokens:\s*(\d+)/), tools: num(/tool_uses:\s*(\d+)/), dur: num(/duration_ms:\s*(\d+)/) });
+            subUsage.set(b.tool_use_id, { total: num(/(?:subagent_tokens|total_tokens):\s*(\d+)/), tools: num(/tool_uses:\s*(\d+)/), dur: num(/duration_ms:\s*(\d+)/) });
           }
         }
       }
@@ -137,7 +137,7 @@ function printText(s) {
   console.log(`\nCache hit ratio: ${s.cacheRatio}%  (cache_read / total input)`);
   console.log(`Web tool calls:  ${s.web.search} search, ${s.web.fetch} fetch`);
   if (s.subs.length) {
-    console.log('\nSUBAGENTS (Agent tool — total_tokens only; cost is OFF the parent budget)');
+    console.log('\nSUBAGENTS (Agent tool — subagent_tokens; cost is OFF the parent budget)');
     for (const x of s.subs) console.log(`  ${x.model.padEnd(10)} ${pad(fmt(x.total), 11)} tok  ${pad(x.tools, 3)} tools  ${pad((x.dur / 1000).toFixed(1) + 's', 7)}  ${x.desc}`);
     console.log(`  ${'TOTAL'.padEnd(10)} ${pad(fmt(s.subTotal), 11)} tok`);
   }
