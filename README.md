@@ -249,3 +249,5 @@ Source-available under the **PolyForm Noncommercial License 1.0.0**: free to use
 ---
 
 Built by Adrian Martinov, April 2026.
+
+*Not affiliated with Marvel/Disney; JARVIS here is a backronym for Just A Rather Versatile Information System.*
