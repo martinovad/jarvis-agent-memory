@@ -2,6 +2,13 @@
 
 A persistent memory layer that gives Claude Code zero-manual cross-session context, backed by an Obsidian-compatible markdown vault. A custom Node.js MCP server exposes the vault to Claude; a set of skills (`/resume`, `/compress`, `/recall`, …) read and write it. Local-first, stdio transport, ~≤2% token overhead per session.
 
+<p align="center">
+  <strong>Interested in this project, or hiring? Let's talk.</strong><br>
+  <a href="https://www.linkedin.com/in/adrian-martinov-584043237/">
+    <img src="https://img.shields.io/badge/Connect_on_LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white" alt="Connect on LinkedIn">
+  </a>
+</p>
+
 > **Environment:** documented Windows-first (PowerShell). macOS/Linux notes are at the end.
 
 ---
@@ -224,3 +231,21 @@ A healthy result reports the MCP connection up plus Working-Memory and Session-L
 - **Memory is private and separate from this repo.** The code (this repo) and the memory (your vault — session logs, decisions, notes) are deliberately kept apart: the vault lives outside this repo and is meant to stay local. A future VPS deployment is the planned home for an always-on agent, not a public host.
 - **The committed `.claude/settings.json`** uses placeholder paths (`<you>`) in its `env` block and permission rules. Replace them with your real paths (`JARVIS_PROJECT_PATH`, and the vault location) before using JARVIS on this clone. It does not affect using JARVIS in *other* projects.
 - **macOS / Linux:** replace Windows paths and `\\` separators with POSIX paths (e.g. `/home/<you>/JARVIS-Vault`), use `~/.claude.json` and `~/.claude/` directly, and run the scaffold/copy steps with the shell equivalents (`mkdir -p`, `cp`). The server and skills are OS-agnostic; only the paths differ.
+
+---
+
+## Origin & prior art
+
+The idea came to me in late 2025, but the actual coding began in April 2026, kickstarted by a Reddit post about using Claude Code for daily note-taking, now that AI agents had finally gotten capable enough to maintain a knowledge base on their own.
+
+I came across Karpathy's "LLM knowledge base" writeup once JARVIS was already taking a similar shape: raw notes compiled into a cross-linked Markdown wiki, queried in compiled form rather than raw. It was a useful point of reference, and I learned a lot from his approach as the project matured - his verification-first principle ("LLMs automate what you can verify") drove JARVIS's A/B test harnesses, his human-in-the-loop ingestion shaped how sessions are reviewed before they're saved, and studying his work sharpened the compile-at-write-time design. JARVIS takes the pattern considerably further: explicit four-tier memory (CoALA), deterministic zero-token extraction of the verbatim record, link-traversal retrieval, dream-style consolidation behind a human approval gate, and per-session token-cost instrumentation.
+
+---
+
+## License
+
+Source-available under the **PolyForm Noncommercial License 1.0.0**: free to use, study, and modify for **noncommercial** purposes, with **commercial use reserved** to the author. For a commercial license or collaboration, reach out via LinkedIn (top of this README). Full terms in [`LICENSE`](LICENSE).
+
+---
+
+Built by Adrian Martinov, April 2026.
