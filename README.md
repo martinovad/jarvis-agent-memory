@@ -54,7 +54,7 @@ JARVIS has three parts that live in three different places. Setup means putting 
 
 | Part | Lives in | Provided by |
 |------|----------|-------------|
-| MCP server (`mcp/`) — 10 vault tools | this repo | `git clone` |
+| MCP server (`mcp/`) - 10 vault tools | this repo | `git clone` |
 | Skills (`/resume`, `/compress`, `/dream`, `/recall`, …) + `resume` & `dream` agents | `~/.claude/commands/` and `~/.claude/agents/` | copied from this repo's `skills/` and `agents/` |
 | MCP registration | `~/.claude.json` → `mcpServers.jarvis` | added by hand (Step 3) |
 | The vault (your notes) | anywhere, e.g. `~/Documents/JARVIS-Vault` | scaffolded fresh (Step 2) |
@@ -66,9 +66,9 @@ The server reads its vault location from the `JARVIS_VAULT_PATH` environment var
 ## Prerequisites
 
 - **Node.js 18+** (`node --version`)
-- **Claude Code** — the CLI, or the Cursor / VS Code extension
+- **Claude Code** - the CLI, or the Cursor / VS Code extension
 - **Git**
-- *(Optional)* **Obsidian** — to browse the vault as a graph. JARVIS does not require it; the vault is just markdown files.
+- *(Optional)* **Obsidian** - to browse the vault as a graph. JARVIS does not require it; the vault is just markdown files.
 
 ---
 
@@ -84,7 +84,7 @@ This installs the MCP SDK and `zod`. The server entry point is `mcp\server.js`.
 
 ## 2. Scaffold a fresh vault
 
-Pick a location for your vault and create the base structure. Per-project folders are created automatically the first time you run `/resume` in a project — this only seeds the shared, top-level files.
+Pick a location for your vault and create the base structure. Per-project folders are created automatically the first time you run `/resume` in a project - this only seeds the shared, top-level files.
 
 ```powershell
 # Choose your vault path
@@ -144,7 +144,7 @@ Write-Host "Vault scaffolded at $Vault"
 
 ## 3. Register the MCP server
 
-Open `~/.claude.json` (`$env:USERPROFILE\.claude.json`) and add a `jarvis` entry under `mcpServers`. Merge this in — don't overwrite the file:
+Open `~/.claude.json` (`$env:USERPROFILE\.claude.json`) and add a `jarvis` entry under `mcpServers`. Merge this in - don't overwrite the file:
 
 ```json
 {
@@ -162,7 +162,7 @@ Open `~/.claude.json` (`$env:USERPROFILE\.claude.json`) and add a `jarvis` entry
 
 - Use **double backslashes** in JSON paths on Windows.
 - Point `args` at the absolute path to `mcp\server.js` from your clone.
-- Set `JARVIS_VAULT_PATH` to the vault from Step 2. If omitted, the server falls back to a hardcoded default that will not exist on your machine — so set it.
+- Set `JARVIS_VAULT_PATH` to the vault from Step 2. If omitted, the server falls back to a hardcoded default that will not exist on your machine - so set it.
 
 *(Alternative, if you have the Claude CLI: `claude mcp add jarvis --env JARVIS_VAULT_PATH=<vault> -- node <path>\mcp\server.js`.)*
 
@@ -227,8 +227,8 @@ A healthy result reports the MCP connection up plus Working-Memory and Session-L
 
 ## Notes & limitations
 
-- **Local-first.** stdio transport, no auth, no TLS — not built for remote/multi-machine access yet. Nothing leaves the machine.
-- **Memory is private and separate from this repo.** The code (this repo) and the memory (your vault — session logs, decisions, notes) are deliberately kept apart: the vault lives outside this repo and is meant to stay local. A future VPS deployment is the planned home for an always-on agent, not a public host.
+- **Local-first.** stdio transport, no auth, no TLS - not built for remote/multi-machine access yet. Nothing leaves the machine.
+- **Memory is private and separate from this repo.** The code (this repo) and the memory (your vault - session logs, decisions, notes) are deliberately kept apart: the vault lives outside this repo and is meant to stay local. A future VPS deployment is the planned home for an always-on agent, not a public host.
 - **The committed `.claude/settings.json`** uses placeholder paths (`<you>`) in its `env` block and permission rules. Replace them with your real paths (`JARVIS_PROJECT_PATH`, and the vault location) before using JARVIS on this clone. It does not affect using JARVIS in *other* projects.
 - **macOS / Linux:** replace Windows paths and `\\` separators with POSIX paths (e.g. `/home/<you>/JARVIS-Vault`), use `~/.claude.json` and `~/.claude/` directly, and run the scaffold/copy steps with the shell equivalents (`mkdir -p`, `cp`). The server and skills are OS-agnostic; only the paths differ.
 
