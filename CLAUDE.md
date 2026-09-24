@@ -1,22 +1,10 @@
 # CLAUDE.md
 
-JARVIS is a persistent memory layer connecting Claude Code to an Obsidian vault at
-`C:\Users\<you>\Documents\JARVIS-Vault`. Goal: zero-manual cross-session context, ≤2% token overhead.
+JARVIS is a persistent memory layer connecting Claude Code to a Markdown vault (`JARVIS_VAULT_PATH`). Goal: cross-session context with ~2% token overhead.
 
-## Status
+- `mcp/server.js` - stdio MCP server, 10 vault tools in `mcp/tools/`; `mcp/lib/vault.js` resolves and guards vault paths.
+- `mcp/scripts/session-context.js` - SessionStart hook (loads Working-Memory, flags unsaved sessions) and `--pending` CLI; "unsaved" is defined in `mcp/lib/sessions.js`.
+- `skills/resume.md` + `mcp/scripts/resume-brief.js` - builds the `/resume` presentation without a model.
+- `skills/compress-last.md` + `extract-transcript.js`, `files-touched.js`, `user-asks.js` - deterministic anchors for saving a session.
 
-Core memory + `/resume` + `/compress`/`/compress-last` + `/dream` complete (Phase 4, B.5, Session C). Memory-linking pass done: Working-Memory is a cross-tier hub and `/recall` traverses links (`recall-links.js`) — see `.claude/rules/internals.md` → Memory Linking.
-
-**Pending:** `/dream` live test (needs a session restart to register its agent). **Deferred:** role-aware retrieval (see `JARVIS_SETUP.md`).
-
-## Rules
-
-- Ask before coding — 95% confidence threshold
-- Discuss architecture before implementing
-- Vault token budget: Working-Memory entries ≤60 tokens, vault CLAUDE.md ≤180 tokens total
-- Windows 11 / PowerShell environment
-
-## Pointers
-
-- Architecture, MCP tools, skills, vault paths: `.claude/rules/internals.md` (auto-loads on `mcp/**` edits; Read on demand otherwise)
-- Project registry: `Projects/registry.md` (via `mcp__jarvis__read_note`)
+Vault budget: Working-Memory entries <= 60 tokens, max 3 entries.

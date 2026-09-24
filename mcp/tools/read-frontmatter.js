@@ -15,7 +15,7 @@ export default {
   handler: async ({ path: notePath }) => {
     const full = safePath(notePath);
     const content = fs.readFileSync(full, 'utf8');
-    const match = content.match(/^---\n([\s\S]*?)\n---/);
+    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     const text = match ? match[0] : 'No frontmatter found';
     return { content: [{ type: 'text', text }] };
   }

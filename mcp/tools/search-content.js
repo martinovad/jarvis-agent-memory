@@ -1,37 +1,20 @@
 import { z } from 'zod';
-import fs from 'fs';
-import { walkVault, rel } from '../lib/vault.js';
+import { searchVault, formatResults } from '../lib/fts.js';
 
 export default {
   name: 'search_content',
   config: {
     title: 'Search content',
-    description: 'Full-text search across all vault notes. Returns matching files with surrounding context.',
+    description: 'Ranked full-text search across vault notes (SQLite FTS5, bm25 with recency weighting). Returns the best-matching note sections with a snippet and heading; read that section, not the whole note.',
     inputSchema: {
-      query: z.string().describe('Text to search for across all notes'),
+      query: z.string().describe('Search terms; a trailing * on a term does prefix matching'),
       max_results: z.number().int().positive().optional().describe('Maximum results to return (default: 10)')
     },
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false }
   },
   handler: async ({ query, max_results }) => {
-    const q = query.toLowerCase();
-    const max = max_results || 10;
-    const files = walkVault();
-    const matches = [];
-
-    for (const file of files) {
-      const content = fs.readFileSync(file, 'utf8');
-      const lower = content.toLowerCase();
-      const idx = lower.indexOf(q);
-      if (idx !== -1) {
-        const start = Math.max(0, idx - 60);
-        const end = Math.min(content.length, idx + q.length + 60);
-        const snippet = content.slice(start, end).replace(/\n/g, ' ').trim();
-        matches.push(`${rel(file)}\n  → ...${snippet}...`);
-        if (matches.length >= max) break;
-      }
-    }
-    const text = matches.length ? matches.join('\n\n') : 'No matches found';
+    const results = searchVault(query, max_results || 10);
+    const text = results.length ? formatResults(results) : 'No matches found';
     return { content: [{ type: 'text', text }] };
   }
 };

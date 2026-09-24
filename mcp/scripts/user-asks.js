@@ -33,7 +33,8 @@ function cleanUser(text) {
     .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '')
     .replace(/\[Request interrupted by user\]/g, '');   // harness marker, not the user's words
   const m = text.match(/<command-name>([^<]+)<\/command-name>/);
-  return (m ? m[1].trim() : text).replace(/\s+/g, ' ').trim();
+  const a = m && text.match(/<command-args>([\s\S]*?)<\/command-args>/);   // keep what was typed after the command
+  return (m ? `${m[1].trim()} ${a ? a[1].trim() : ''}` : text).replace(/\s+/g, ' ').trim();
 }
 
 const firstWords = t => {

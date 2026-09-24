@@ -1,3 +1,7 @@
+---
+model: sonnet
+effort: medium
+---
 Load session context from the vault. Execute all steps in order:
 
 **Step 0 — Resolve project**
@@ -54,24 +58,14 @@ Load session context from the vault. Execute all steps in order:
         - Merge the two keys into `env` (creating the `env` block if absent), preserving all other top-level keys and formatting. Write back with Edit (targeted replacement) when feasible; otherwise Write the full re-serialized JSON.
    g. Tell the user: "Vault initialized for {Slug} and env vars wired into .claude/settings.json. Skills work immediately in this session; env vars only apply on next session start (used by the session-end hook)."
 
-**Step 1 — Delegate to the resume subagent**
+**Step 1 — Build the presentation** (PowerShell tool)
 
-Use the `Agent` tool to spawn `subagent_type: resume`. Prompt (exactly these three fields, one per line):
-
-```
-Slug: {Slug}
-Vault Root: {Vault Root}
-Today: {YYYY-MM-DD from the current-date context block}
+```powershell
+node "$env:JARVIS_REPO\mcp\scripts\resume-brief.js" "{Slug}" "{Vault Root}" "{YYYY-MM-DD from the current-date context block}"
 ```
 
-The subagent reads Working-Memory and Preferences in its own context; calls the `mcp__jarvis__pick_resume_sessions` MCP tool for deterministic scoring (word-boundary keyword overlap × bucket weight, WM-resident slugs excluded); reads the picked logs; and returns a formatted presentation with a trailing `Status:` line.
+The script builds the whole presentation deterministically (no subagent, zero tokens): Working-Memory; the open items of active plans (`**OPEN:**` lines in `{Vault Root}/Research` notes whose status starts with "active"); the latest session's Quick Resume; older related sessions as one line each (`pick_resume_sessions` scoring, Working-Memory sessions excluded); Preferences.
 
-**Step 2 — Branch on the subagent's status and display**
+**Step 2 — Display**
 
-The subagent's response ends with one status line. Read the last line of the response:
-
-- `Status: DONE` — strip the status line; display the rest verbatim to the user. This is the normal path.
-- `Status: BLOCKED` — display the subagent's full response (it explains which read failed). Do not retry.
-- `Status: NEEDS_CONTEXT` — display the response and note that the parent's brief was incomplete (check Step 1 fields). Do not retry without fixing the brief.
-
-Do not add commentary beyond the new-project setup note from Step 0 (if init ran). The subagent's output is the user-facing presentation.
+If the output starts with `BLOCKED:`, show it and stop. Otherwise display it verbatim. Do not add commentary beyond the new-project setup note from Step 0 (if init ran).

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import fs from 'fs';
 import path from 'path';
-import { safePath } from '../lib/vault.js';
+import { writablePath, writeFileAtomic } from '../lib/vault.js';
 
 export default {
   name: 'write_note',
@@ -15,9 +15,14 @@ export default {
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false }
   },
   handler: async ({ path: notePath, content }) => {
-    const full = safePath(notePath);
+    // Brain.md is the append-only session index: write_note would replace every row, so rows go
+    // through append_note (which also refuses to create a missing file).
+    if (path.basename(notePath).toLowerCase() === 'brain.md') {
+      throw new Error(`Brain.md is append-only: use append_note with path "Brain.md" (refused: ${notePath})`);
+    }
+    const full = writablePath(notePath);
     fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content, 'utf8');
+    writeFileAtomic(full, content);
     return { content: [{ type: 'text', text: `Written: ${notePath}` }] };
   }
 };

@@ -18,7 +18,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const VAULT = process.env.JARVIS_VAULT_PATH || 'C:\\Users\\<you>\\Documents\\JARVIS-Vault';
+import { VAULT } from '../lib/vault.js';
 
 const norm = p => p.replace(/\\/g, '/');
 const lcDrive = p => p.replace(/^([a-zA-Z]):/, (_, d) => d.toLowerCase() + ':');

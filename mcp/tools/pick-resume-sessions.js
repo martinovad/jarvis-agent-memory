@@ -26,7 +26,8 @@ function bucketWeight(days) {
 }
 
 // Parse Brain.md table into [{date, project, slug, keywords[]}, ...].
-// Slug column holds an Obsidian wiki-link [[YYYY-MM-DD-slug]]; extract just the slug.
+// Slug column holds an Obsidian wiki-link, either bare [[YYYY-MM-DD-slug]] or
+// folder-qualified [[Session-Logs/YYYY-MM-DD-slug]]; extract just the slug.
 function parseBrain(content) {
   const lines = content.split('\n');
   const rows = [];
@@ -39,7 +40,7 @@ function parseBrain(content) {
     const cells = line.split('|').slice(1, -1).map(s => s.trim());
     if (cells.length < 4) continue;
     const [date, project, slugCell, keywordsCell] = cells;
-    const slug = slugCell.replace(/^\[\[\d{4}-\d{2}-\d{2}-/, '').replace(/\]\]$/, '').trim();
+    const slug = slugCell.replace(/^\[\[(?:[\w-]+\/)?\d{4}-\d{2}-\d{2}-/, '').replace(/\]\]$/, '').trim();
     const keywords = keywordsCell.split(',').map(k => k.trim()).filter(Boolean);
     rows.push({ date, project, slug, keywords });
   }

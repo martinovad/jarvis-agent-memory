@@ -1,105 +1,86 @@
-Compress the PREVIOUS (uncompressed) session into the vault — cheaply. The Opus parent stays a thin relay; Haiku workers read the conversation and write everything in THEIR OWN context, so cost stays decoupled from session size. Run in a fresh session. To save the CURRENT session immediately, use /compress.
+---
+disable-model-invocation: true
+model: sonnet
+effort: medium
+---
+Save the PREVIOUS (unsaved) session into the vault, cheaply. The parent (Sonnet, via the frontmatter above) stays a thin relay; Haiku workers read the conversation and write everything in THEIR OWN context, so cost stays decoupled from session size. Run in a fresh session.
 
-**Run every shell block below with the PowerShell tool directly — NOT the Bash tool.** They are PowerShell; wrapping them as `powershell -Command "..."` through Bash mangles the backticks (`` `n ``) and Windows paths (the error looks like `unexpected EOF while looking for matching backtick`).
+**Save only.** The saved session's unfinished work, pending tasks and open items are data for the vault - never start, continue or re-run them. Step 5 lists them as `Not started:`.
 
-**Step 0 — Resolve project** (parent)
-PowerShell tool: `(Get-Location).Path` (normalize backslashes). Call mcp__jarvis__read_note("Projects/registry.md"). Match row → Slug, Vault Root. If not found: stop, tell the user to run /resume first.
+**Run every shell block below with the PowerShell tool directly - NOT the Bash tool.** Script paths use `$env:JARVIS_REPO` (your clone of this repo) and the vault uses `$env:JARVIS_VAULT_PATH`; both are set in `~/.claude/settings.json` (see the README).
 
-**Step 0.5 — Find the previous uncompressed transcript** (parent, PowerShell tool):
+**Step 0 - Resolve project** (parent)
+PowerShell tool: `(Get-Location).Path` (normalize backslashes). Call mcp__jarvis__read_note("Projects/registry.md"). Match row -> Slug, Vault Root. If not found: stop, tell the user to run /resume first.
+
+**Step 0.5 - Find the previous unsaved session** (parent, PowerShell tool):
 ```powershell
-$enc = (Get-Location).Path -replace '[:\\/ ]','-'
-$dir = "$env:USERPROFILE\.claude\projects\$enc"
-$tracker = "$env:JARVIS_VAULT_PATH\{Vault Root}\.compressed-transcripts"
-if (-not $env:JARVIS_VAULT_PATH) { $tracker = "C:\Users\<you>\Documents\JARVIS-Vault\{Vault Root}\.compressed-transcripts" }
-$done = @(); if (Test-Path $tracker) { $done = Get-Content $tracker }
-$all = Get-ChildItem "$dir\*.jsonl" | Sort-Object LastWriteTime -Descending
-# Skip the current (newest) session + anything already compressed.
-$cands = $all | Select-Object -Skip 1 | Where-Object { $done -notcontains $_.Name }
-# Drop THIN meta-runs: a session that BOTH started with a /compress(-last) command
-# AND stayed short (no real work to save). A session that began with /compress-last
-# and then pivoted into substantial work (many turns) must still be captured — so
-# only skip when the assistant-turn count is also low.
-$real = foreach ($c in $cands) {
-  $firstUser = Get-Content $c.FullName -TotalCount 30 | Where-Object { $_ -match '"type":"user"' } | Select-Object -First 1
-  if ($firstUser -and $firstUser -match '<command-name>/compress') {
-    $turns = (Select-String -Path $c.FullName -Pattern '"type":"assistant"').Count
-    if ($turns -lt 60) { continue }   # thin throwaway compress-run -> skip
-  }
-  $c
-}
-$real = @($real)
-if ($real.Count -eq 0) { "NONE" } else {
-  "$($real[0].FullName)"
-  "$($real[0].LastWriteTime.ToString('yyyy-MM-dd'))"
-  "REMAINING: $($real.Count - 1)"
-  $real | Select-Object -Skip 1 | ForEach-Object { "  - $($_.Name) [$($_.LastWriteTime.ToString('yyyy-MM-dd'))]" }
-}
+node "$env:JARVIS_REPO\mcp\scripts\session-context.js" --pending
 ```
-Capture PREV_TRANSCRIPT (line 1), PREV_DATE (line 2), and the REMAINING count. If "NONE": tell the user "No uncompressed prior session found." and stop. The run processes only the newest real uncompressed session; if REMAINING > 0, remember it — after finishing, tell the user how many older sessions still await and that re-running `/compress-last` captures the next.
+It prints one line per unsaved session of this project, newest first: `<date> meta=<yes|no> <transcript path>`. "Unsaved" is the SessionStart hook's definition (`mcp/lib/sessions.js`): it skips this session, transcripts in `.compressed-transcripts`, sessions with no reply, thin /compress-last meta-runs (nothing typed after the command) and continuation copies covered by a newer transcript. From line 1 capture PREV_DATE, META (the `meta=` value) and PREV_TRANSCRIPT (the path after it); REMAINING = number of lines - 1. If "NONE": tell the user "No unsaved prior session found." and stop. The run processes only the newest unsaved session; if REMAINING > 0, tell the user at the end how many older sessions still await and that re-running `/compress-last` captures the next.
 
-**Step 1 — Extract the cleaned conversation to a temp file** (parent, PowerShell tool — DO NOT read this file into your own context):
+**Step 1 - Run the deterministic anchors + extract the cleaned conversation** (parent, PowerShell tool). The anchors are GROUND TRUTH the parent INJECTS into the analyzer prompt (an injected anchor gets reproduced faithfully; a self-run one gets ignored in favour of prose-inference). Do NOT read the cleaned conversation into your own context - only capture its path.
 ```powershell
-node "C:\Users\<you>\Active Projects\Jarvis\mcp\scripts\extract-transcript.js" "{PREV_TRANSCRIPT}" --stdout > "$env:TEMP\jarvis-prev.txt"
+node "$env:JARVIS_REPO\mcp\scripts\extract-transcript.js" "{PREV_TRANSCRIPT}" --stdout > "$env:TEMP\jarvis-prev.txt"
+Remove-Item "$env:TEMP\jarvis-plan.md" -ErrorAction SilentlyContinue
 "$env:TEMP\jarvis-prev.txt"
+"$env:TEMP\jarvis-plan.md"
 ```
-Capture the printed path as TEMP_CONV; note the turn count from the script's stderr line.
-
-Also capture the deterministic list of files changed (ground truth — the cleaned conversation has tool calls STRIPPED, so the analyzer cannot otherwise see what was built):
+Capture the two printed paths as TEMP_CONV and PLAN_FILE. The plan travels as this file, never through your context: the analyzer writes it, the writer reads it, and you read it once (Step 3).
 ```powershell
-node "C:\Users\<you>\Active Projects\Jarvis\mcp\scripts\files-touched.js" "{PREV_TRANSCRIPT}"
+node "$env:JARVIS_REPO\mcp\scripts\files-touched.js" "{PREV_TRANSCRIPT}"
+node "$env:JARVIS_REPO\mcp\scripts\user-asks.js" "{PREV_TRANSCRIPT}"
 ```
-Capture the output as FILES_TOUCHED.
+Capture the first output as FILES_TOUCHED and the second as USER_ASKS.
 
-Also capture the deterministic list of user asks - a numbered table-of-contents of every user turn. The cleaned conversation is long and the analyzer can lossily drop later threads; this anchor guarantees every distinct ask is represented:
-```powershell
-node "C:\Users\<you>\Active Projects\Jarvis\mcp\scripts\user-asks.js" "{PREV_TRANSCRIPT}"
+**Step 2 - Spawn the analyzer** (parent). Agent tool: `subagent_type: general-purpose`. Model: `haiku` - unless Step 0.5 reported `meta=yes` (the prior session was itself a save run, where another session's content dominates the prose), then `model: sonnet`. Prompt:
 ```
-Capture the output as USER_ASKS.
-
-**Step 2 — Phase 1: spawn the analyzer** (parent). Agent tool: `subagent_type: general-purpose`, `model: haiku`. Prompt:
-```
-Files changed in this session (deterministic ground truth, extracted from tool calls — the cleaned conversation below has tool calls STRIPPED, so this is the authoritative record of what was built/edited):
+Files changed in this session (deterministic ground truth from tool calls - the cleaned conversation below has tool calls STRIPPED, so this is the authoritative record of what was built/edited):
 {FILES_TOUCHED}
 
-Reproduce that list verbatim in FILES MODIFIED, and let it anchor your whole summary: if files were changed, this was a BUILD session — do NOT characterize it as research/discussion only.
-
-Every distinct user request in this session (deterministic table-of-contents, in order). The cleaned conversation is long and easy to under-read, so treat this as a CHECKLIST your summary must cover - no ask may be silently dropped, even minor or non-build ones. A session can span unrelated threads (a build, then research, then a personal or admin task) - capture all of them:
+Every distinct user request in this session (deterministic table of contents, in order):
 {USER_ASKS}
 
-Read the cleaned conversation at {TEMP_CONV} ONCE, fully (use a single Read; do not re-read in chunks). Before finalizing, verify every numbered ask above is reflected somewhere in QUICK RESUME / DECISIONS / KEY LEARNINGS / PENDING TASKS. Produce a compress PLAN as plain structured text and nothing else:
-- SLUG (2-4 word kebab-case)
+Read the cleaned conversation at {TEMP_CONV} ONCE, fully (a single Read). It is PROSE ONLY - what was SAID, not what was DONE.
+
+Three rules govern the analysis:
+- ANCHOR PRIMACY - the two anchors above are ground truth; where the prose conflicts with them, the anchors win. Reproduce the Files-changed list COMPLETE and VERBATIM in FILES MODIFIED. Treat the user requests as a CHECKLIST every part of your plan must cover. If files changed, this was a BUILD session.
+- META-SESSION - if user-ask #1 is a /compress-last command, THIS session's job was to SAVE a PRIOR session, so the prose contains that prior session's plan and pending tasks. Attribute to this session ONLY what the Files anchor or a distinct user ask corroborates, and do NOT reuse its slug.
+- DONE-RECONCILIATION - before putting anything under PENDING TASKS, check the Files anchor: if a file there implements it, it is DONE, not pending.
+
+Then produce a save PLAN:
+- SLUG (2-4 word kebab-case - name THIS session's own work)
 - KEYWORDS (4-8, comma-separated)
 - QUICK RESUME (2-3 sentences orienting the next session)
 - DECISIONS (each: choice + rationale) or "none"
 - ARCHITECTURE (system/component changes) or "none"
 - KEY LEARNINGS (bullets)
-- FILES MODIFIED (path: what changed)
+- FILES MODIFIED (the Files anchor, verbatim and complete, annotated with what changed)
 - PENDING TASKS (bullets)
 - PREFERENCES (user working-style changes) or "none"
-Do not write any files. Return only the plan.
+- OPEN QUESTIONS (only what the user must answer for this save to be correct) or "none"
+Write each section as `NAME:` followed by its content, first line `SLUG: <slug>`. Write the whole plan with the Write tool to {PLAN_FILE} (overwrite it); write no other file. Then return only two lines: `SLUG: <slug>` and `OPEN QUESTIONS: <count or none>`.
 ```
-Capture the returned plan.
+Check the file (PowerShell tool): `Select-String -Path "{PLAN_FILE}" -Pattern '^SLUG:' -Quiet` must print True. If not, send that same agent (SendMessage to its agentId) "Write the complete plan to {PLAN_FILE} with the Write tool, first line `SLUG:`. Do not re-read the conversation." - never spawn a new analyzer for this.
 
-**Step 3 — Present the plan + confirm** (parent). Show it as "Planning to save (previous session, {PREV_DATE})" with an Open questions line. Wait for the user unless there are none.
+**Step 3 - Read the plan + confirm** (parent). Read {PLAN_FILE} once (Read tool); later steps use its sections. Show one line, "Planning to save (previous session, {PREV_DATE}): <slug> - <QUICK RESUME> Full plan: {PLAN_FILE}" - do not re-type the plan. If OPEN QUESTIONS is "none", continue to Step 4 without waiting. Otherwise ask those questions, wait for the user, and append their answers to the file as a final `USER ANSWERS:` section (`Add-Content -Encoding utf8`).
 
-**Step 4 — Phase 2: spawn the writer** (parent). A FRESH worker — it does NOT need the conversation (structured sections come from the plan; the verbatim log is appended by the deterministic script). Agent tool: `subagent_type: general-purpose`, `model: haiku`. Prompt = the confirmed plan (with the user's edits applied) followed by:
+**Step 4 - Spawn the writer** (parent). A FRESH worker - Agent tool: `subagent_type: general-purpose`, `model: haiku`. Prompt (the plan stays in the file - do not paste it):
 ```
-Write the above plan to the JARVIS vault using your mcp__jarvis__* tools and the PowerShell tool. Context: Vault Root = {Vault Root}, Slug = {Slug}, date = {PREV_DATE}, transcript = {PREV_TRANSCRIPT}.
-1. mcp__jarvis__write_note "{Vault Root}/Session-Logs/{PREV_DATE}-<slug>.md" — frontmatter (type: session-log, date: {PREV_DATE}, domain: <slug>, project: {Slug}, keywords: [...]) then ## Quick Resume Context, ## Decisions Made (table), ## Key Learnings, ## Files Modified, ## Pending Tasks, then a line "---", then "## Raw Session Log", then "<!-- /resume stops here — /recall searches below -->". STOP there — do NOT write the conversation turns yourself.
-2. PowerShell tool: node "C:\Users\<you>\Active Projects\Jarvis\mcp\scripts\extract-transcript.js" "{PREV_TRANSCRIPT}" "{Vault Root}/Session-Logs/{PREV_DATE}-<slug>.md"  (appends the verbatim log).
-3. If decisions: mcp__jarvis__search_filename "{Vault Root}/Decisions/<slug>" then write/append "{Vault Root}/Decisions/{PREV_DATE}-<slug>.md". If architecture: search then write/append "{Vault Root}/Architecture/<component>.md". If preferences changed: mcp__jarvis__append_note "Knowledge/Preferences.md".
-4. mcp__jarvis__read_note "{Vault Root}/Working-Memory.md"; prepend "<!-- Session 3 (newest) -->\n**{PREV_DATE} · <slug>** — <=60-token summary. Open: <first pending or none>.\n↳ [[Session-Logs/{PREV_DATE}-<slug>]]<append ' · [[<component>]]' for each Architecture note you wrote in step 3, and ' · [[Decisions/{PREV_DATE}-<slug>]]' if you wrote a Decision>" — keep the bold **{PREV_DATE} · <slug>** header byte-for-byte (the /resume scorer parses it); the ↳ line wires WM into episodic + semantic memory (cross-tier hub); keep max 3 blocks; write back with mcp__jarvis__write_note.
-5. mcp__jarvis__append_note "Brain.md" with "| {PREV_DATE} | {Slug} | [[{PREV_DATE}-<slug>]] | <keywords> |".
-6. PowerShell tool: Split-Path "{PREV_TRANSCRIPT}" -Leaf | Add-Content "<vault>\{Vault Root}\.compressed-transcripts"  (vault = $env:JARVIS_VAULT_PATH or C:\Users\<you>\Documents\JARVIS-Vault).
-7. PowerShell tool: node "C:\Users\<you>\Active Projects\Jarvis\mcp\scripts\token-report.js" "{PREV_TRANSCRIPT}" --ledger --html > $null 2>&1  (updates the token ledger + regenerates dashboard.html).
+Read the save plan at {PLAN_FILE} once. If it ends with a USER ANSWERS section, those answers override the plan where they conflict. Write the plan to the JARVIS vault using your mcp__jarvis__* tools and the PowerShell tool. Context: Vault Root = {Vault Root}, Slug = {Slug}, date = {PREV_DATE}, transcript = {PREV_TRANSCRIPT}.
+1. mcp__jarvis__write_note "{Vault Root}/Session-Logs/{PREV_DATE}-<slug>.md" - frontmatter (type: session-log, date: {PREV_DATE}, domain: <slug>, project: {Slug}, keywords: [...]) then ## Quick Resume Context, ## Decisions Made (table), ## Key Learnings, ## Files Modified, ## Pending Tasks, then a line "---", then "## Raw Session Log", then "<!-- /resume stops here -->". STOP there - do NOT write the conversation turns yourself.
+2. PowerShell tool: node "$env:JARVIS_REPO\mcp\scripts\extract-transcript.js" "{PREV_TRANSCRIPT}" "{Vault Root}/Session-Logs/{PREV_DATE}-<slug>.md"  (appends the verbatim log).
+3a. Required when DECISIONS is not "none": mcp__jarvis__search_filename "{Vault Root}/Decisions/<slug>" then write/append "{Vault Root}/Decisions/{PREV_DATE}-<slug>.md".
+3b. Required when ARCHITECTURE is not "none": for each component it names, mcp__jarvis__search_filename "{Vault Root}/Architecture/<component>" then append a dated section to the existing note, or write "{Vault Root}/Architecture/<component>.md" if none exists.
+(Preferences are appended by the parent, not by you.)
+4. mcp__jarvis__read_note "{Vault Root}/Working-Memory.md"; prepend "**{PREV_DATE} · <slug>** - <=60-token summary. Open: <first pending or none>.\n↳ [[Session-Logs/{PREV_DATE}-<slug>]]<append ' · [[<component>]]' for each Architecture note from step 3b, and ' · [[Decisions/{PREV_DATE}-<slug>]]' if you wrote a Decision>" - keep the bold **{PREV_DATE} · <slug>** header byte-for-byte (the /resume scorer parses it); keep max 3 blocks; write back with mcp__jarvis__write_note.
+5. mcp__jarvis__append_note "Brain.md" with "| {PREV_DATE} | {Slug} | [[Session-Logs/{PREV_DATE}-<slug>]] | <keywords> |".
+6. PowerShell tool: Split-Path "{PREV_TRANSCRIPT}" -Leaf | Add-Content "$env:JARVIS_VAULT_PATH\{Vault Root}\.compressed-transcripts"
 Return ONLY the list of vault files you wrote (one per line) + the Raw Session Log turn count. End with a status line: DONE or BLOCKED <reason>.
 ```
 Capture the returned file list + status.
 
-**Step 5 — Report + clean up** (parent). Display the file list verbatim. PowerShell tool: `Remove-Item "$env:TEMP\jarvis-prev.txt" -ErrorAction SilentlyContinue`. If the worker returned BLOCKED, show its reason instead. If REMAINING (Step 0.5) > 0, add one final line: "N older uncompressed session(s) still pending — run `/compress-last` again to capture the next." No other commentary except the dream-gate line from Step 6.
+**Step 4.5 - Check the writer's claim** (parent). The writer's DONE is a claim, not a check.
+1. If the plan's PREFERENCES is not "none": mcp__jarvis__append_note "Knowledge/Preferences.md" with each preference as one `- <text> ({PREV_DATE})` line.
+2. Completeness: when DECISIONS is not "none", `Test-Path "$env:JARVIS_VAULT_PATH\{Vault Root}\Decisions\{PREV_DATE}-<slug>.md"` must be True; when ARCHITECTURE is not "none", the writer's list must include an `Architecture/` path. If either is missing, send the writer (SendMessage to its agentId) "Do the missing step 3a/3b now, add each new note's link to your Working-Memory ↳ line, and return the updated file list." - never write those notes yourself.
 
-**Step 6 — Dream gate** (parent, PowerShell tool). The save just added a Brain.md row, so check cheaply whether recurring knowledge now warrants consolidation (no `--today` → uses the system date):
-```powershell
-node "C:\Users\<you>\Active Projects\Jarvis\mcp\scripts\dream-scan.js" "{Slug}" "{Vault Root}" --gate
-```
-If the output is `GATE: none`, add nothing. If it is `GATE: N new candidate(s): <list>`, append exactly ONE line to your report: "💭 N recurring topic(s) now look promotion-worthy (<list>) — run `/dream` to consolidate." This only surfaces topics not already offered (the script tracks that in `.dream-state`), so it won't nag on every save.
+**Step 5 - Report + clean up** (parent). Display the file list verbatim. PowerShell tool: `Remove-Item "$env:TEMP\jarvis-prev.txt","$env:TEMP\jarvis-plan.md" -ErrorAction SilentlyContinue`. If the worker returned BLOCKED, show its reason instead. Then one line `Not started:` with the plan's PENDING TASKS, `;`-separated (or `none`). If REMAINING (Step 0.5) > 0, add: "N older unsaved session(s) still pending - run `/compress-last` again to capture the next." No other commentary.

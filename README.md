@@ -1,6 +1,6 @@
 # JARVIS
 
-A persistent memory layer that gives Claude Code zero-manual cross-session context, backed by an Obsidian-compatible markdown vault. A custom Node.js MCP server exposes the vault to Claude; a set of skills (`/resume`, `/compress`, `/recall`, …) read and write it. Local-first, stdio transport, ~≤2% token overhead per session.
+A persistent memory layer that gives Claude Code cross-session context with no manual re-explaining, backed by an Obsidian-compatible Markdown vault. A small Node.js MCP server exposes the vault to Claude; two skills read and write it: `/resume` loads context, `/compress-last` saves a finished session. Local-first, stdio transport, ~2% token overhead per session.
 
 <p align="center">
   <strong>Interested in this project, or hiring? Let's talk.</strong><br>
@@ -9,7 +9,7 @@ A persistent memory layer that gives Claude Code zero-manual cross-session conte
   </a>
 </p>
 
-> **Environment:** documented Windows-first (PowerShell). macOS/Linux notes are at the end.
+> This repository is the minimal public core of a larger private system: enough to set up and run the memory loop, nothing more. **Environment:** documented Windows-first (PowerShell); macOS/Linux notes are at the end.
 
 ---
 
@@ -17,60 +17,45 @@ A persistent memory layer that gives Claude Code zero-manual cross-session conte
 
 LLM coding agents are stateless: every new session starts from zero. The two usual ways to carry context forward both scale the wrong way:
 
-- **Keep one ever-growing conversation.** The full history is re-sent on every turn, so token usage grows roughly quadratically with turn count and quality drops as the window fills (the "lost-in-the-middle" and long-context-degradation effects). A real 498-turn session measured here was re-sending ~268K tokens *every turn* just to carry history, climbing toward the 1M-token ceiling.
+- **Keep one ever-growing conversation.** The full history is re-sent on every turn, so token usage grows roughly quadratically with turn count and quality drops as the window fills. A real 498-turn session measured here was re-sending ~268K tokens *every turn* just to carry history.
 - **Start fresh and re-explain.** Cheaper per turn, but lossy and manual: you re-type context and decide from memory what mattered.
 
-JARVIS removes the tradeoff by keeping knowledge in a vault instead of the context window. Each session starts lean; what you learned persists as plain Markdown and is pulled back on demand.
+JARVIS keeps knowledge in a vault instead of the context window. Each session starts lean; what you learned persists as plain Markdown and is loaded back automatically.
 
 ## What it is
 
-A persistent, token-efficient memory layer for an LLM coding agent (Claude Code), targeting ≤2% token overhead per session:
-
-- **Four-tier memory (CoALA-grounded):** a hot *working-memory* buffer, an *episodic* store of full session logs, a *semantic* store of distilled decisions and architecture notes, and *procedural* skills - all plain Markdown in an Obsidian vault, exposed through a custom MCP server.
-- **Deterministic / probabilistic split:** mechanical work (verbatim transcript extraction, file-change tracking, keyword-frequency scoring, link resolution) runs as zero-token Node.js scripts; a thin orchestrator delegates only judgment to cheap Haiku sub-agents in isolated context windows, so cost stays decoupled from session size.
-- **Human-memory-like skills:** session compression, a *"dreaming"* consolidation pass that promotes recurring knowledge into permanent memory behind a human approval gate (informed by Generative Agents' reflection and A-MEM's linked-note evolution), and a retrieval layer that traverses a typed knowledge graph of the vault.
-- **Measure-before-you-trust:** key automations ship with A/B verification harnesses rather than on faith.
+- **Tiered memory, all plain Markdown:** a small *working-memory* buffer loaded at every session start, *episodic* session logs, and *semantic* decision and architecture notes, exposed to Claude through an MCP server.
+- **Deterministic where possible:** mechanical work (the verbatim session log, which files changed, what the user asked for) is done by zero-token Node.js scripts; cheap Haiku sub-agents do only the judgment, in their own context windows, so saving cost stays flat no matter how long the session was.
 
 ## Token economics
 
-| Dimension | Normal AI (no memory layer) | JARVIS |
+| Dimension | No memory layer | JARVIS |
 |---|---|---|
 | Cross-session memory | None: cold start every session | Persistent vault, loaded automatically |
-| Standing overhead / session | 0 | ~2K tokens (~0.2% of a 1M window) |
-| Restore prior context | Manual re-paste, or carry the whole transcript | `/resume`: ~1-3K tokens, automatic |
-| Keep a long history alive | Quadratic re-send, up to the 1M wall | Start fresh; knowledge lives in the vault |
-| Save a session for later | Not really possible | `/compress-last`: lightweight Haiku token usage, decoupled from session size |
-| Quality at scale | Degrades as history grows | Lean context + front-loaded summaries |
+| Standing overhead / session | 0 | ~2K tokens |
+| Restore prior context | Manual re-paste, or carry the whole transcript | `/resume`: a few K tokens, automatic |
+| Save a session for later | Not really possible | `/compress-last`: Haiku sub-agents, cost decoupled from session size |
 
-**Measured example.** Saving a 498-turn / 130.5M-cumulative-token work session cost **~83K Haiku tokens** for the part that actually reads and rewrites it, and that figure stays roughly flat no matter how large the saved session is, because the heavy reading happens in isolated Haiku sub-agents rather than the coordinating model's window.
-
-*(Measured 2026-06-10 from the project's own token instrumentation; figures reconcile with its per-session ledger, and the Haiku total is exact as reported by the runtime.)*
-
-**5-hour usage window.** Claude subscriptions (Pro and Max) meter usage in a rolling 5-hour window. Because `/compress-last` offloads most of its work to Haiku and serves ~81% of the orchestrator's input from cache, a single save consumes only a small fraction of that window - negligible in normal daily work. *(Subscription limits change over time; figures checked 2026-06-10.)*
+**Measured example.** Saving a 498-turn work session cost **~83K Haiku tokens** for the part that reads and rewrites it, and that figure stays roughly flat however large the session is, because the heavy reading happens in isolated sub-agents rather than the coordinating model's window. *(Measured 2026-06-10 from the project's own token instrumentation.)*
 
 ## How the pieces fit
-
-JARVIS has three parts that live in three different places. Setup means putting each in place:
 
 | Part | Lives in | Provided by |
 |------|----------|-------------|
 | MCP server (`mcp/`) - 10 vault tools | this repo | `git clone` |
-| Skills (`/resume`, `/compress`, `/dream`, `/recall`, …) + `resume` & `dream` agents | `~/.claude/commands/` and `~/.claude/agents/` | copied from this repo's `skills/` and `agents/` |
-| MCP registration | `~/.claude.json` → `mcpServers.jarvis` | added by hand (Step 3) |
+| Session-start hook (`mcp/scripts/session-context.js`) | registered in `~/.claude/settings.json` | Step 4 |
+| Skills (`/resume`, `/compress-last`) | `~/.claude/commands/` | copied from `skills/` (Step 5) |
+| MCP registration | `~/.claude.json` -> `mcpServers.jarvis` | Step 3 |
 | The vault (your notes) | anywhere, e.g. `~/Documents/JARVIS-Vault` | scaffolded fresh (Step 2) |
-
-The server reads its vault location from the `JARVIS_VAULT_PATH` environment variable.
 
 ---
 
 ## Prerequisites
 
-- **Node.js 18+** (`node --version`)
+- **Node.js 22.13+** (`node --version`; the search tool uses the built-in `node:sqlite`)
 - **Claude Code** - the CLI, or the Cursor / VS Code extension
 - **Git**
-- *(Optional)* **Obsidian** - to browse the vault as a graph. JARVIS does not require it; the vault is just markdown files.
-
----
+- *(Optional)* **Obsidian** - to browse the vault as a graph. The vault is just Markdown files.
 
 ## 1. Clone and install dependencies
 
@@ -80,18 +65,15 @@ cd jarvis-agent-memory\mcp
 npm install
 ```
 
-This installs the MCP SDK and `zod`. The server entry point is `mcp\server.js`.
-
 ## 2. Scaffold a fresh vault
 
-Pick a location for your vault and create the base structure. Per-project folders are created automatically the first time you run `/resume` in a project - this only seeds the shared, top-level files.
+Per-project folders are created automatically the first time you run `/resume` in a project; this only seeds the shared top-level files.
 
 ```powershell
-# Choose your vault path
 $Vault = "$env:USERPROFILE\Documents\JARVIS-Vault"
 $today = (Get-Date -Format "yyyy-MM-dd")
 
-New-Item -ItemType Directory -Force "$Vault\Projects", "$Vault\Knowledge", "$Vault\+Inbox" | Out-Null
+New-Item -ItemType Directory -Force "$Vault\Projects", "$Vault\Knowledge" | Out-Null
 
 @"
 ---
@@ -114,7 +96,7 @@ type: brain
 
 # Brain
 
-<!-- Global session index. One row per compressed session across all projects. /compress appends here. -->
+<!-- Global session index. One row per saved session across all projects. /compress-last appends here. -->
 
 | Date | Project | Slug | Keywords |
 |------|---------|------|----------|
@@ -130,13 +112,6 @@ last_updated: $today
 
 ## Working Style
 -
-
-## Technical
-- OS:
-- Shell:
-
-## Communication
--
 "@ | Set-Content -Encoding utf8 "$Vault\Knowledge\Preferences.md"
 
 Write-Host "Vault scaffolded at $Vault"
@@ -144,7 +119,7 @@ Write-Host "Vault scaffolded at $Vault"
 
 ## 3. Register the MCP server
 
-Open `~/.claude.json` (`$env:USERPROFILE\.claude.json`) and add a `jarvis` entry under `mcpServers`. Merge this in - don't overwrite the file:
+Add a `jarvis` entry under `mcpServers` in `~/.claude.json` (`$env:USERPROFILE\.claude.json`). Merge it in - don't overwrite the file:
 
 ```json
 {
@@ -152,72 +127,59 @@ Open `~/.claude.json` (`$env:USERPROFILE\.claude.json`) and add a `jarvis` entry
     "jarvis": {
       "command": "node",
       "args": ["C:\\path\\to\\jarvis-agent-memory\\mcp\\server.js"],
-      "env": {
-        "JARVIS_VAULT_PATH": "C:\\Users\\<you>\\Documents\\JARVIS-Vault"
-      }
+      "env": { "JARVIS_VAULT_PATH": "C:\\Users\\<you>\\Documents\\JARVIS-Vault" }
     }
   }
 }
 ```
 
-- Use **double backslashes** in JSON paths on Windows.
-- Point `args` at the absolute path to `mcp\server.js` from your clone.
-- Set `JARVIS_VAULT_PATH` to the vault from Step 2. If omitted, the server falls back to a hardcoded default that will not exist on your machine - so set it.
+Use double backslashes in JSON paths on Windows. *(With the Claude CLI: `claude mcp add jarvis --env JARVIS_VAULT_PATH=<vault> -- node <clone>\mcp\server.js`.)*
 
-*(Alternative, if you have the Claude CLI: `claude mcp add jarvis --env JARVIS_VAULT_PATH=<vault> -- node <path>\mcp\server.js`.)*
+## 4. Set the paths and the session-start hook
 
-## 4. Install the skills and agent
+In `~/.claude/settings.json`, merge in two environment variables (the skills read them) and the hook that loads working memory at every session start:
 
-Copy the vendored skill and agent files into your global Claude config:
+```json
+{
+  "env": {
+    "JARVIS_REPO": "C:\\path\\to\\jarvis-agent-memory",
+    "JARVIS_VAULT_PATH": "C:\\Users\\<you>\\Documents\\JARVIS-Vault"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [{ "type": "command", "command": "node \"C:\\path\\to\\jarvis-agent-memory\\mcp\\scripts\\session-context.js\"" }]
+      }
+    ]
+  }
+}
+```
+
+## 5. Install the skills
 
 ```powershell
-$cc = "$env:USERPROFILE\.claude"
-New-Item -ItemType Directory -Force "$cc\commands", "$cc\agents" | Out-Null
-Copy-Item ".\skills\*.md"  "$cc\commands\" -Force
-Copy-Item ".\agents\*.md"  "$cc\agents\"   -Force
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\commands" | Out-Null
+Copy-Item ".\skills\*.md" "$env:USERPROFILE\.claude\commands\" -Force
 ```
 
-This installs all skills (`/resume`, `/compress`, `/compress-last`, `/preserve`, `/dream`, `/recall`, `/status`, `/dashboard`, `/test-resume`, `/test-compress`) and the `resume` + `dream` Haiku agents.
+## 6. Reload and use
 
-## 5. Reload and verify
+The MCP server starts with Claude Code and does not hot-reload: reload the window (Cursor / VS Code: `Ctrl+Shift+P` -> "Developer: Reload Window") or restart the `claude` CLI.
 
-The MCP server is spawned as a child process when Claude Code starts, so it does **not** hot-reload.
-
-- **Cursor / VS Code:** `Ctrl+Shift+P` → "Developer: Reload Window"
-- **CLI:** restart your `claude` session
-
-Then run:
-
-```
-/status
-```
-
-A healthy result reports the MCP connection up plus Working-Memory and Session-Logs counts. If `/status` reports the MCP as down, re-check the path in `args` and that `npm install` completed.
-
-## 6. Use it
-
-- **First time in any project:** `cd` into the project, run `/resume`. It registers the project in `registry.md`, creates its vault folder (`Projects/{Slug}/` with `CLAUDE.md`, `Working-Memory.md`, `Index.md`, `Decisions/`, `Architecture/`, `Session-Logs/`), and writes `JARVIS_VAULT_ROOT` + `JARVIS_PROJECT_PATH` into that project's `.claude/settings.json`.
-- **During a session:** `/recall <topic>` to search the vault, `/preserve <insight>` to pin a permanent note.
-- **Before closing (or next session):** `/compress-last` from a fresh session is the recommended low-cost save; `/compress` saves the current session in-place. Either writes the session log, routes decisions/architecture notes, updates Working-Memory, and appends a row to `Brain.md`.
-- **Periodically:** `/dream` consolidates recurring knowledge into permanent memory (you approve each promotion); `/recall <topic>` searches and traverses the vault's linked notes.
-- **Next session:** the first message silently auto-loads Working-Memory + Preferences; run `/resume` for the full recap.
+- **First time in a project:** `cd` into it and run `/resume`. It registers the project in `registry.md`, creates its vault folder (`Projects/{Slug}/` with `CLAUDE.md`, `Working-Memory.md`, `Index.md`) and writes the project's vault root into its `.claude/settings.json`.
+- **Every session start:** the hook loads the project's Working-Memory automatically and tells you when an earlier session is not saved yet.
+- **Saving:** start a fresh session and run `/compress-last`. It writes the previous session's log (summary plus verbatim prose), routes decisions and architecture notes, updates Working-Memory and appends a row to `Brain.md`.
+- **Full recap:** `/resume`.
 
 ---
 
-## Skills reference
+## Skills
 
 | Skill | What it does |
 |-------|-------------|
-| `/resume` | Resolve project from CWD, load Working-Memory + Preferences, surface 3 relevant past sessions. Initializes new projects on first run. |
-| `/compress` | Save the current session: model writes the summary, a deterministic script writes the verbatim log. Updates Working-Memory + Brain.md. |
-| `/compress-last` | Save the *previous* session from a fresh, cheap context (the recommended low-cost path). |
-| `/preserve <insight>` | Append a concise insight to the project's permanent `CLAUDE.md`. |
-| `/dream` | Consolidate recurring knowledge into permanent memory: a deterministic anchor (`dream-scan.js`) finds recurring topics, the `dream` Haiku agent proposes promotions / profile updates / stale demotions, you approve each. |
-| `/recall <topic>` | Full-text + filename vault search, then 1-hop link traversal (`recall-links.js`) surfacing connected notes grouped by memory role. |
-| `/status` | MCP health + Working-Memory / Session-Logs counts + token-cap check. |
-| `/dashboard` | Regenerate the token-usage dashboard from the ledger (`token-report.js --html`) and open it in the browser. |
-| `/test-resume` | A/B harness verifying the `resume` agent against inline execution. |
-| `/test-compress` | Verifies the transcript extractor's fidelity, speed, and cost. |
+| `/resume` | Resolve the project from the working directory; show Working-Memory, open items, the latest session's summary, related older sessions and your preferences. Initializes new projects on first run. |
+| `/compress-last` | Save the previous session from a fresh, cheap context: deterministic anchors + a Haiku analyzer write a plan file, a Haiku writer commits it to the vault. |
 
 ## MCP tools (`mcp__jarvis__*`)
 
@@ -225,20 +187,19 @@ A healthy result reports the MCP connection up plus Working-Memory and Session-L
 
 ---
 
-## Notes & limitations
+## Notes and limitations
 
-- **Local-first.** stdio transport, no auth, no TLS - not built for remote/multi-machine access yet. Nothing leaves the machine.
-- **Memory is private and separate from this repo.** The code (this repo) and the memory (your vault - session logs, decisions, notes) are deliberately kept apart: the vault lives outside this repo and is meant to stay local. A future VPS deployment is the planned home for an always-on agent, not a public host.
-- **The committed `.claude/settings.json`** uses placeholder paths (`<you>`) in its `env` block and permission rules. Replace them with your real paths (`JARVIS_PROJECT_PATH`, and the vault location) before using JARVIS on this clone. It does not affect using JARVIS in *other* projects.
-- **macOS / Linux:** replace Windows paths and `\\` separators with POSIX paths (e.g. `/home/<you>/JARVIS-Vault`), use `~/.claude.json` and `~/.claude/` directly, and run the scaffold/copy steps with the shell equivalents (`mkdir -p`, `cp`). The server and skills are OS-agnostic; only the paths differ.
+- **Local-first.** stdio transport, no auth, no TLS. Nothing leaves the machine.
+- **Memory is private and separate from this repo.** The code (this repo) and the memory (your vault) are kept apart on purpose: the vault lives outside the repo and stays local.
+- **macOS / Linux:** the server and scripts are OS-agnostic; the skills' shell blocks are PowerShell, so install PowerShell 7 (`pwsh`) or adapt them. Use POSIX paths (e.g. `/home/<you>/JARVIS-Vault`) in the settings above.
 
 ---
 
-## Origin & prior art
+## Origin and prior art
 
 The idea came to me in late 2025, but the actual coding began in April 2026, kickstarted by a Reddit post about using Claude Code for daily note-taking, now that AI agents had finally gotten capable enough to maintain a knowledge base on their own.
 
-I came across Karpathy's "LLM knowledge base" writeup once JARVIS was already taking a similar shape: raw notes compiled into a cross-linked Markdown wiki, queried in compiled form rather than raw. It was a useful point of reference, and I learned a lot from his approach as the project matured - his verification-first principle ("LLMs automate what you can verify") drove JARVIS's A/B test harnesses, his human-in-the-loop ingestion shaped how sessions are reviewed before they're saved, and studying his work sharpened the compile-at-write-time design. JARVIS takes the pattern considerably further: explicit four-tier memory (CoALA), deterministic zero-token extraction of the verbatim record, link-traversal retrieval, dream-style consolidation behind a human approval gate, and per-session token-cost instrumentation.
+I came across Karpathy's "LLM knowledge base" writeup once JARVIS was already taking a similar shape: raw notes compiled into a cross-linked Markdown wiki, queried in compiled form rather than raw. It was a useful point of reference - his verification-first principle ("LLMs automate what you can verify") shaped how JARVIS checks its own work, and studying his approach sharpened the compile-at-write-time design.
 
 ---
 

@@ -11,13 +11,13 @@
 // What it keeps: user `text` content and assistant `text` blocks, in order.
 // What it drops: thinking, tool_use, tool_result, attachments, and every
 // non-message event type; plus isMeta / isSidechain entries.
-// Slash-command injections (<command-name>X</command-name>) collapse to "X".
+// Slash-command injections (<command-name>X</command-name>) collapse to "X" plus its arguments.
 // Consecutive same-role turns coalesce into one labeled block.
 
 import fs from 'fs';
 import path from 'path';
 
-const VAULT = process.env.JARVIS_VAULT_PATH || 'C:\\Users\\<you>\\Documents\\JARVIS-Vault';
+import { VAULT } from '../lib/vault.js';
 
 function die(msg) {
   console.error(`ERROR: ${msg}`);
@@ -57,7 +57,9 @@ function cleanUser(text) {
     .replace(/<ide_selection>[\s\S]*?<\/ide_selection>/g, '')
     .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '');
   const m = text.match(/<command-name>([^<]+)<\/command-name>/);
-  return m ? m[1].trim() : text;
+  if (!m) return text;
+  const a = text.match(/<command-args>([\s\S]*?)<\/command-args>/);   // keep what was typed after the command
+  return a && a[1].trim() ? `${m[1].trim()} ${a[1].trim()}` : m[1].trim();
 }
 
 const turns = [];

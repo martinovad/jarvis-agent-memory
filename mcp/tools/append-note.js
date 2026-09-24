@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import fs from 'fs';
-import { safePath } from '../lib/vault.js';
+import { writablePath } from '../lib/vault.js';
 
 export default {
   name: 'append_note',
@@ -14,7 +14,7 @@ export default {
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
   },
   handler: async ({ path: notePath, content }) => {
-    const full = safePath(notePath);
+    const full = writablePath(notePath);
     const existing = fs.readFileSync(full, 'utf8');
     const sep = existing.endsWith('\n') ? '' : '\n';
     fs.appendFileSync(full, sep + content, 'utf8');
