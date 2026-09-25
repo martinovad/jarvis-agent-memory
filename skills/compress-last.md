@@ -32,7 +32,9 @@ node "$env:JARVIS_REPO\mcp\scripts\user-asks.js" "{PREV_TRANSCRIPT}"
 ```
 Capture the first output as FILES_TOUCHED and the second as USER_ASKS.
 
-**Step 2 - Spawn the analyzer** (parent). Agent tool: `subagent_type: general-purpose`. Model: `haiku` - unless Step 0.5 reported `meta=yes` (the prior session was itself a save run, where another session's content dominates the prose), then `model: sonnet`. Prompt:
+**Every worker in this skill runs in the foreground** (Agent tool `run_in_background: false`; the tool's default is background). Wait for its result inside the same turn, never end the turn to wait: a resumed turn runs on the session's default model, not the one this skill pins.
+
+**Step 2 - Spawn the analyzer** (parent). Agent tool: `subagent_type: general-purpose`, `run_in_background: false`. Model: `haiku` - unless Step 0.5 reported `meta=yes` (the prior session was itself a save run, where another session's content dominates the prose), then `model: sonnet`. Prompt:
 ```
 Files changed in this session (deterministic ground truth from tool calls - the cleaned conversation below has tool calls STRIPPED, so this is the authoritative record of what was built/edited):
 {FILES_TOUCHED}
@@ -64,7 +66,7 @@ Check the file (PowerShell tool): `Select-String -Path "{PLAN_FILE}" -Pattern '^
 
 **Step 3 - Read the plan + confirm** (parent). Read {PLAN_FILE} once (Read tool); later steps use its sections. Show one line, "Planning to save (previous session, {PREV_DATE}): <slug> - <QUICK RESUME> Full plan: {PLAN_FILE}" - do not re-type the plan. If OPEN QUESTIONS is "none", continue to Step 4 without waiting. Otherwise ask those questions, wait for the user, and append their answers to the file as a final `USER ANSWERS:` section (`Add-Content -Encoding utf8`).
 
-**Step 4 - Spawn the writer** (parent). A FRESH worker - Agent tool: `subagent_type: general-purpose`, `model: haiku`. Prompt (the plan stays in the file - do not paste it):
+**Step 4 - Spawn the writer** (parent). A FRESH worker - Agent tool: `subagent_type: general-purpose`, `model: haiku`, `run_in_background: false`. Prompt (the plan stays in the file - do not paste it):
 ```
 Read the save plan at {PLAN_FILE} once. If it ends with a USER ANSWERS section, those answers override the plan where they conflict. Write the plan to the JARVIS vault using your mcp__jarvis__* tools and the PowerShell tool. Context: Vault Root = {Vault Root}, Slug = {Slug}, date = {PREV_DATE}, transcript = {PREV_TRANSCRIPT}.
 1. mcp__jarvis__write_note "{Vault Root}/Session-Logs/{PREV_DATE}-<slug>.md" - frontmatter (type: session-log, date: {PREV_DATE}, domain: <slug>, project: {Slug}, keywords: [...]) then ## Quick Resume Context, ## Decisions Made (table), ## Key Learnings, ## Files Modified, ## Pending Tasks, then a line "---", then "## Raw Session Log", then "<!-- /resume stops here -->". STOP there - do NOT write the conversation turns yourself.
@@ -73,11 +75,11 @@ Read the save plan at {PLAN_FILE} once. If it ends with a USER ANSWERS section, 
 3b. Required when ARCHITECTURE is not "none": for each component it names, mcp__jarvis__search_filename "{Vault Root}/Architecture/<component>" then append a dated section to the existing note, or write "{Vault Root}/Architecture/<component>.md" if none exists.
 (Preferences are appended by the parent, not by you.)
 4. mcp__jarvis__read_note "{Vault Root}/Working-Memory.md"; prepend "**{PREV_DATE} · <slug>** - <=60-token summary. Open: <first pending or none>.\n↳ [[Session-Logs/{PREV_DATE}-<slug>]]<append ' · [[<component>]]' for each Architecture note from step 3b, and ' · [[Decisions/{PREV_DATE}-<slug>]]' if you wrote a Decision>" - keep the bold **{PREV_DATE} · <slug>** header byte-for-byte (the /resume scorer parses it); keep max 3 blocks; write back with mcp__jarvis__write_note.
-5. mcp__jarvis__append_note "Brain.md" with "| {PREV_DATE} | {Slug} | [[Session-Logs/{PREV_DATE}-<slug>]] | <keywords> |".
+5. mcp__jarvis__append_note "Brain.md" with "| {PREV_DATE} | {Slug} | [[Session-Logs/{PREV_DATE}-<slug>]] | <keywords> |" - the link starts with `Session-Logs/`, never with the vault root.
 6. PowerShell tool: Split-Path "{PREV_TRANSCRIPT}" -Leaf | Add-Content "$env:JARVIS_VAULT_PATH\{Vault Root}\.compressed-transcripts"
 Return ONLY the list of vault files you wrote (one per line) + the Raw Session Log turn count. End with a status line: DONE or BLOCKED <reason>.
 ```
-Capture the returned file list + status.
+Capture the returned file list + status. **If the writer returned BLOCKED, the save is BLOCKED:** report its reason and stop; never repair the vault yourself. The parent never uses Edit, Write or MultiEdit on vault files. Its only vault writes are the `mcp__jarvis__` calls and literal commands in this skill, so the vault tools' guards (Brain.md is append-only) always apply.
 
 **Step 4.5 - Check the writer's claim** (parent). The writer's DONE is a claim, not a check.
 1. If the plan's PREFERENCES is not "none": mcp__jarvis__append_note "Knowledge/Preferences.md" with each preference as one `- <text> ({PREV_DATE})` line.
