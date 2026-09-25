@@ -197,7 +197,7 @@ The MCP server starts with Claude Code and does not hot-reload: reload the windo
 
 ## Origin and prior art
 
-The idea came to me in late 2025, but the actual coding began in April 2026, kickstarted by a Reddit post about using Claude Code for daily note-taking, now that AI agents had finally gotten capable enough to maintain a knowledge base on their own.
+The idea came to me in late 2025, but the actual coding began in February/March 2026, kickstarted by a Reddit post about using Claude Code for daily note-taking, now that AI agents had finally gotten capable enough to maintain a knowledge base on their own.
 
 I came across Karpathy's "LLM knowledge base" writeup once JARVIS was already taking a similar shape: raw notes compiled into a cross-linked Markdown wiki, queried in compiled form rather than raw. It was a useful point of reference - his verification-first principle ("LLMs automate what you can verify") shaped how JARVIS checks its own work, and studying his approach sharpened the compile-at-write-time design.
 
