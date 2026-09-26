@@ -7,7 +7,9 @@
 //   Open Items       **OPEN:** lines from <Vault Root>/Research notes whose status starts with "active",
 //                    each prefixed with its section heading. A decided item gets its marker rewritten
 //                    (DECIDED/DONE + date) in the plan itself, so this list never replays stale work.
-//   Latest Session   Quick Resume Context of the newest Working-Memory entry's session log
+//   Last Session     structured head (Quick Resume, Decisions, Key Learnings, Files Modified, Pending)
+//                    of the newest substantial Working-Memory session, capped; thinner newer ones get a
+//                    Skipped line. None substantial: the newest one's Quick Resume. Never the raw log text.
 //   Older Related    top-3 sessions by pick_resume_sessions scoring (Working-Memory sessions excluded),
 //                    one line each; /recall fetches details on demand
 //   Preferences      Knowledge/Preferences.md, H1 stripped, subheadings as bold lines
@@ -69,12 +71,145 @@ function quickResume(file) {
   return (body.replace(/^# .*$/m, '').trim().split(/\n\s*\n/)[0] || '').trim();
 }
 
-const firstEntry = wm.replace(/<!--[\s\S]*?-->/g, '').match(/\*\*(\d{4}-\d{2}-\d{2})\s*·\s*([\w-]+)\*\*/);
-if (firstEntry) {
-  const [, date, s] = firstEntry;
+// ---- last session ----------------------------------------------------------------------
+// The structured head of the newest SUBSTANTIAL Working-Memory session: (>=1 own typed prompt AND
+// >=1 real file) OR (>=2 own typed prompts AND >=1 decision). A session that only ran a save still gets
+// analyzer-written Decisions about the save itself, so the typed-prompt count is what tells it apart.
+// Capped at CAP tokens by a fixed cut ladder; Quick Resume and Pending are never cut.
+const CAP = 1500;
+const tokens = s => Math.ceil(s.length / 4);
+const HEADS = ['Quick Resume', 'Decisions', 'Key Learnings', 'Files Modified', 'Pending Tasks'];
+const SAVE_TARGET = /(^|\/)(Session-Logs|Decisions|Architecture)\/|(^|\/)(Working-Memory\.md|Brain\.md|Preferences\.md|\.compressed-transcripts)$/;
+
+function parts(file) {
+  const txt = stripFm(read(`${VAULT}/${vaultRoot}/Session-Logs/${file}`) || '').replace(/\r\n/g, '\n');
+  const [head, raw] = txt.split(/^## Raw Session Log.*$/m);
+  const sec = {};
+  for (const h of HEADS) {
+    const m = head.match(new RegExp(`^## ${h}[^\\n]*\\n([\\s\\S]*?)(?=^## |^---\\s*$|(?![\\s\\S]))`, 'm'));
+    const body = m ? m[1].trim() : '';
+    if (m) sec[h] = /^_?\(?none\)?\.?_?$/i.test(body) ? '' : body;
+  }
+  return { sec, raw: raw || '' };
+}
+
+// Own typed prompts in the raw log: role blocks split at a blank line; a USER block counts when,
+// after dropping notifications, command output, interrupt markers and slash-command paragraphs,
+// text remains - and it is the first block or follows an ASSISTANT block. Known limit: an assistant
+// message quoting a log line that starts "USER: " after a blank line is counted too.
+// null = no USER blocks at all (an old log format), so the prompt condition is skipped.
+function ownPrompts(raw) {
+  const start = raw.search(/^(USER|ASSISTANT): /m);
+  if (start < 0) return null;
+  const blocks = raw.slice(start).split(/\n\n(?=(?:USER|ASSISTANT): )/);
+  let n = 0, users = 0;
+  blocks.forEach((b, i) => {
+    if (!b.startsWith('USER: ')) return;
+    users++;
+    if (i > 0 && !blocks[i - 1].startsWith('ASSISTANT: ')) return;
+    const text = b.slice(6)
+      .replace(/<task-notification>[\s\S]*?<\/task-notification>/g, '')
+      .replace(/<local-command-(\w+)>[\s\S]*?<\/local-command-\1>/g, '')
+      .replace(/\[Request interrupted by user[^\]]*\]/g, '');
+    if (text.split(/\n\s*\n/).some(p => p.trim() && !/^\/[a-z][\w:-]*(\s|$)/i.test(p.trim()))) n++;
+  });
+  return users ? n : null;
+}
+
+const bullets = body => body.split('\n').filter(l => /^- /.test(l));
+const pathOf = b => { const t = b.match(/`([^`]+)`/); return (t ? t[1] : b.slice(2).split(/\s+/).find(w => /\/|\.\w{1,5}\b/.test(w)) || '').replace(/[),.:;]+$/, ''); };
+const realFiles = body => bullets(body).filter(b => { const p = pathOf(b); return !p || !SAVE_TARGET.test(p); }).length;
+function decisionCount(body) {
+  const rows = body.split('\n').filter(l => /^\|/.test(l) && !/^\|[\s|:-]+\|$/.test(l)).length;
+  return (rows ? rows - 1 : 0) + body.split('\n').filter(l => /^([-*] |### )/.test(l)).length;
+}
+
+// Returns null when substantial, else the reason it was skipped.
+function thin(file) {
+  if (!file) return 'no log';
+  const { sec, raw } = parts(file);
+  if (!('Quick Resume' in sec)) return 'no structured head';
+  const own = ownPrompts(raw), files = realFiles(sec['Files Modified'] || ''), dec = decisionCount(sec['Decisions'] || '');
+  if (own === null) return files || dec ? null : 'no files or decisions';
+  if (own === 0) return 'no typed prompt';
+  if (files || (own >= 2 && dec)) return null;
+  return dec ? `${own} typed prompt, no files` : 'no files or decisions';
+}
+
+// Cut renderings. Files: bullet -> its path; Decisions: first column + any "Decision" column
+// (tables) or the text before the first " — ", " - " or ". " (bullets).
+const filesAsPaths = body => bullets(body).map(b => `- ${pathOf(b) || b.slice(2).split(/ — | \(/)[0]}`).join('\n');
+function decisionsShort(body) {
+  const lines = body.split('\n');
+  const hdr = lines.find(l => /^\|/.test(l));
+  const cells = l => l.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+  const keep = hdr ? cells(hdr).map((c, i) => i === 0 || /^decision$/i.test(c)) : [];
+  return lines.map(l => {
+    if (/^\|[\s|:-]+\|$/.test(l)) return `|${keep.filter(Boolean).map(() => '---').join('|')}|`;
+    if (/^\|/.test(l)) return `| ${cells(l).filter((_, i) => keep[i]).join(' | ')} |`;
+    if (/^[-*] /.test(l)) { const cut = l.slice(2).search(/ — | - |\. /); return cut < 0 ? l : l.slice(0, cut + 2); }
+    return /^### /.test(l) ? l : null;
+  }).filter(l => l !== null).join('\n');
+}
+// Top-level bullets with their continuation lines, so "first 3" keeps whole learnings.
+const items = body => body.split(/\n(?=- )/).filter(b => /^- /.test(b));
+
+function lastSessionBlock(date, s, file, skipped) {
+  const { sec } = parts(file);
+  const nFiles = bullets(sec['Files Modified'] || '').length, learn = items(sec['Key Learnings'] || ''), nDec = decisionCount(sec['Decisions'] || '');
+  const st = { files: 'full', kl: 'full', dec: 'full' };
+  const view = {
+    'Quick Resume': () => sec['Quick Resume'],
+    'Decisions': () => ({ full: sec['Decisions'], short: decisionsShort(sec['Decisions'] || ''), count: `${nDec} decisions, see log` })[st.dec],
+    'Key Learnings': () => ({ full: sec['Key Learnings'], k3: [...learn.slice(0, 3), `- +${learn.length - 3} more, see log`].join('\n'), count: `${learn.length} learnings, see log` })[st.kl],
+    'Files Modified': () => ({ full: sec['Files Modified'], paths: filesAsPaths(sec['Files Modified'] || ''), count: `${nFiles} files, see log` })[st.files],
+    'Pending Tasks': () => sec['Pending Tasks'],
+  };
+  const cutNames = () => [
+    st.files === 'paths' && 'Files Modified as paths', st.files === 'count' && 'Files Modified as a count',
+    st.kl === 'k3' && `Key Learnings to the first 3 of ${learn.length}`, st.kl === 'count' && 'Key Learnings as a count',
+    st.dec === 'short' && 'Decisions without rationale', st.dec === 'count' && 'Decisions as a count',
+  ].filter(Boolean);
+  const render = over => {
+    const lines = [`## Last Session - ${date} · ${s}`, ...skipped];
+    for (const h of HEADS) {
+      const body = sec[h] && view[h]();
+      if (body) lines.push(`### ${h === 'Pending Tasks' ? `Pending at end of session (${date})` : h}`, body);
+    }
+    const cuts = cutNames();
+    if (cuts.length) lines.push(`_Cut to fit ${CAP} tokens: ${cuts.join('; ')}._`);
+    if (over) lines.push(`_Over the ${CAP}-token cap after every cut._`);
+    return lines.join('\n\n');
+  };
+  const ladder = [
+    () => nFiles && (st.files = 'paths'), () => nFiles && (st.files = 'count'),
+    () => learn.length > 3 && (st.kl = 'k3'), () => nDec && (st.dec = 'short'),
+    () => learn.length && (st.kl = 'count'), () => nDec && (st.dec = 'count'),
+  ];
+  let block = render(false);
+  for (const step of ladder) {
+    if (tokens(block) <= CAP) return block;
+    if (step()) block = render(false);
+  }
+  return tokens(block) <= CAP ? block : render(true);
+}
+
+const entries = [...wm.replace(/<!--[\s\S]*?-->/g, '').matchAll(/\*\*(\d{4}-\d{2}-\d{2})\s*·\s*([\w-]+)\*\*/g)].map(m => [m[1], m[2]]);
+const skipped = [];
+let shown = false;
+for (const [date, s] of entries) {
+  const file = logFor(date, s);
+  const why = thin(file);
+  if (why) { skipped.push(`_Skipped ${date} · ${s} (${why})._`); continue; }
+  out.push(lastSessionBlock(date, s, file, skipped));
+  shown = true;
+  break;
+}
+if (!shown && entries.length) {
+  const [date, s] = entries[0];
   const file = logFor(date, s);
   const qr = file && quickResume(file);
-  if (qr) out.push(`## Latest Session - ${date} · ${s}`, qr);
+  if (qr) out.push([`## Last Session - ${date} · ${s}`, ...skipped, qr, '_No substantial session in Working-Memory; showing the newest._'].join('\n\n'));
 }
 
 // ---- older related sessions ------------------------------------------------------------

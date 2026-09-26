@@ -178,7 +178,7 @@ The MCP server starts with Claude Code and does not hot-reload: reload the windo
 
 | Skill | What it does |
 |-------|-------------|
-| `/resume` | Resolve the project from the working directory; show Working-Memory, open items, the latest session's summary, related older sessions and your preferences. Initializes new projects on first run. |
+| `/resume` | Resolve the project from the working directory; show Working-Memory, open items, the last substantial session in full (capped; a thin session is skipped), related older sessions and your preferences. Initializes new projects on first run. |
 | `/compress-last` | Save the previous session from a fresh, cheap context: deterministic anchors + a Haiku analyzer write a plan file, a Haiku writer commits it to the vault. |
 
 ## MCP tools (`mcp__jarvis__*`)

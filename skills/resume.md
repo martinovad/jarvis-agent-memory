@@ -64,7 +64,7 @@ Load session context from the vault. Execute all steps in order:
 node "$env:JARVIS_REPO\mcp\scripts\resume-brief.js" "{Slug}" "{Vault Root}" "{YYYY-MM-DD from the current-date context block}"
 ```
 
-The script builds the whole presentation deterministically (no subagent, zero tokens): Working-Memory; the open items of active plans (`**OPEN:**` lines in `{Vault Root}/Research` notes whose status starts with "active"); the latest session's Quick Resume; older related sessions as one line each (`pick_resume_sessions` scoring, Working-Memory sessions excluded); Preferences.
+The script builds the whole presentation deterministically (no subagent, zero tokens): Working-Memory; the open items of active plans (`**OPEN:**` lines in `{Vault Root}/Research` notes whose status starts with "active"); the last substantial session's structured head (Quick Resume, Decisions, Key Learnings, Files Modified, Pending at end of session; capped at 1,500 tokens by a fixed cut ladder that never cuts Quick Resume or Pending, never the raw log), with a Skipped line for each thinner newer session; older related sessions as one line each (`pick_resume_sessions` scoring, Working-Memory sessions excluded); Preferences.
 
 **Step 2 — Display**
 
